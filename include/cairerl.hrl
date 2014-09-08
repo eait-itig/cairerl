@@ -25,3 +25,48 @@
 %% ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 %% POSSIBILITY OF SUCH DAMAGE.
 %%
+
+-record(cairo_image, {width :: integer(), height :: integer(), data :: binary()}).
+
+% tags (state data)
+-record(cairo_set_tag, {tag :: atom(), value :: cairerl:value()}).
+-record(cairo_tag_deref, {tag :: atom(), field :: atom(), out_tag :: atom()}).
+
+% path operations
+-record(cairo_arc, {xc :: cairerl:value(), yc :: cairerl:value(), radius :: cairerl:value(), angle1 :: cairerl:value(), angle2 :: cairerl:value()}).
+-record(cairo_rectangle, {x :: cairerl:value(), y :: cairerl:value(), width :: cairerl:value(), height :: cairerl:value()}).
+-record(cairo_new_sub_path, {}).
+-record(cairo_curve_to, {x :: cairerl:value(), y :: cairerl:value(),
+				   x2 :: cairerl:value(), y2 :: cairerl:value(),
+				   x3 :: cairerl:value(), y3 :: cairerl:value(), flags = [] :: [relative]}).
+-record(cairo_line_to, {x :: cairerl:value(), y :: cairerl:value(), flags = [] :: [relative]}).
+-record(cairo_move_to, {x :: cairerl:value(), y :: cairerl:value(), flags = [] :: [relative]}).
+-record(cairo_close_path, {}).
+
+% rendering operations
+-record(cairo_image_surface_create, {width :: integer(), height :: integer()}).
+-record(cairo_set_line_width, {width = 1.0 :: float()}).
+-record(cairo_set_source, {tag :: atom()}).
+-record(cairo_set_source_rgba, {r :: float(), g :: float(), b :: float(), a = 1.0 :: float()}).
+-record(cairo_set_antialias, {flags = [] :: cairerl:antialias_flags()}).
+-record(cairo_set_fill_rule, {fill_rule = winding :: winding | even_odd}).
+-record(cairo_clip, {flags = [] :: [preserve]}).
+-record(cairo_stroke, {flags = [] :: [preserve]}).
+-record(cairo_fill, {flags = [] :: [preserve]}).
+-record(cairo_paint, {alpha :: undefined | float()}).
+
+% pattern operations
+-record(cairo_pattern_create_linear, {tag :: atom(), x :: cairerl:value(), y :: cairerl:value(), x2 :: cairerl:value(), y2 :: cairerl:value()}).
+-record(cairo_pattern_add_color_stop_rgba, {tag :: atom(), offset :: float(), r :: float(), g :: float(), b :: float()}).
+
+% transform operations
+-record(cairo_identity_matrix, {}).
+-record(cairo_translate, {x :: cairerl:value(), y :: cairerl:value()}).
+-record(cairo_scale, {x :: cairerl:value(), y :: cairerl:value()}).
+-record(cairo_rotate, {angle :: cairerl:value()}).
+
+% text operations
+-record(cairo_text_extents, {text :: binary(), tag :: atom()}).
+-record(cairo_select_font_face, {family :: binary(), slant = normal :: normal | italic | oblique, weight = normal :: normal | bold}).
+-record(cairo_set_font_size, {size :: float()}).
+-record(cairo_show_text, {text :: binary()}).

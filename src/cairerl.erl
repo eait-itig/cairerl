@@ -1,7 +1,7 @@
 %%
 %% cairo erlang binding
 %%
-%% Copyright (c) 2013, The University of Queensland
+%% Copyright (c) 2014, The University of Queensland
 %% Author: Alex Wilson <alex@uq.edu.au>
 %%
 %% Redistribution and use in source and binary forms, with or without
@@ -26,25 +26,16 @@
 %% POSSIBILITY OF SUCH DAMAGE.
 %%
 
--module(cairerl_nif).
-
--export([draw/3]).
--on_load(init/0).
+-module(cairerl).
 
 -include("cairerl.hrl").
 
-init() ->
-    PrivDir = case code:priv_dir(?MODULE) of
-                  {error, _} ->
-                      EbinDir = filename:dirname(code:which(?MODULE)),
-                      AppPath = filename:dirname(EbinDir),
-                      filename:join(AppPath, "priv");
-                  Path ->
-                      Path
-              end,
-    erlang:load_nif(filename:join(PrivDir, ?MODULE), 0).
+-type antialias_flags() :: [gray | subpixel | fast | good | best].
+-type tag() :: atom().
+-type value() :: float() | tag().
+-type image() :: #cairo_image{}.
 
--type tags() :: [{atom(), float() | tags()}].
--spec draw(Pixels :: cairerl:image(), InitTags :: tags(), Ops :: [cairerl:op()]) -> {ok, tags(), cairerl:image()} | {error, term()}.
-draw(_Pixels, _InitTags, _Ops) ->
-	error(bad_nif).
+-type op() :: tuple().
+
+
+-export_type([antialias_flags/0, tag/0, value/0, op/0, image/0]).

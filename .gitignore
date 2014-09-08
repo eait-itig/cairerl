@@ -1,5 +1,7 @@
 ebin
 deps
+c_src/*.o
+priv/*.so
 doc/*/*
 doc/*.css
 doc/*.html

@@ -167,38 +167,7 @@ handle_op_set_source(ErlNifEnv *env, struct context *ctx, const ERL_NIF_TERM *ar
 	return OP_OK;
 }
 
-static enum op_return
-handle_op_image_sfc_create(ErlNifEnv *env, struct context *ctx, const ERL_NIF_TERM *argv, int argc)
-{
-	int w, h;
-
-	if (ctx->cairo != NULL)
-		return ERR_BAD_ARGS;
-	if (argc != 2)
-		return ERR_BAD_ARGS;
-
-	if (!enif_get_int(env, argv[0], &w))
-		return ERR_BAD_ARGS;
-	if (!enif_get_int(env, argv[1], &h))
-		return ERR_BAD_ARGS;
-
-	ctx->sfc = cairo_image_surface_create(CAIRO_FORMAT_RGB24, w, h);
-	if (cairo_surface_status(ctx->sfc) != CAIRO_STATUS_SUCCESS)
-		return ERR_FAILURE;
-	ctx->cairo = cairo_create(ctx->sfc);
-	if (cairo_status(ctx->cairo) != CAIRO_STATUS_SUCCESS) {
-		cairo_surface_destroy(ctx->sfc);
-		ctx->sfc = NULL;
-		return ERR_FAILURE;
-	}
-	ctx->w = w;
-	ctx->h = h;
-
-	return OP_OK;
-}
-
 static struct op_handler op_handlers[] = {
-	{"cairo_image_sfc_create", handle_op_image_sfc_create},
 	{"cairo_arc", handle_op_arc},
 	{"cairo_rectangle", handle_op_rectangle},
 	{"cairo_set_source_rgba", handle_op_set_source_rgba},

@@ -44,7 +44,6 @@
 -record(cairo_close_path, {}).
 
 % rendering operations
--record(cairo_image_surface_create, {width :: integer(), height :: integer()}).
 -record(cairo_set_line_width, {width = 1.0 :: float()}).
 -record(cairo_set_source, {tag :: atom()}).
 -record(cairo_set_source_rgba, {r :: float(), g :: float(), b :: float(), a = 1.0 :: float()}).

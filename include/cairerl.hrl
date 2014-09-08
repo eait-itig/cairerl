@@ -47,7 +47,7 @@
 -record(cairo_set_line_width, {width = 1.0 :: float()}).
 -record(cairo_set_source, {tag :: atom()}).
 -record(cairo_set_source_rgba, {r :: float(), g :: float(), b :: float(), a = 1.0 :: float()}).
--record(cairo_set_antialias, {flags = [] :: cairerl:antialias_flags()}).
+-record(cairo_set_antialias, {mode = default :: cairerl:antialias_mode()}).
 -record(cairo_set_fill_rule, {fill_rule = winding :: winding | even_odd}).
 -record(cairo_clip, {flags = [] :: [preserve]}).
 -record(cairo_stroke, {flags = [] :: [preserve]}).

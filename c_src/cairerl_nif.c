@@ -149,11 +149,24 @@ handle_op_set_source_rgba(ErlNifEnv *env, struct context *ctx, const ERL_NIF_TER
 static enum op_return
 handle_op_fill(ErlNifEnv *env, struct context *ctx, const ERL_NIF_TERM *argv, int argc)
 {
+	ERL_NIF_TERM head, tail, psatom;
+	int preserve = 0;
 	if (ctx->cairo == NULL)
 		return ERR_NOT_INIT;
 	if (argc != 1)
 		return ERR_BAD_ARGS;
-	cairo_fill(ctx->cairo);
+	psatom = enif_make_atom(env, "preserve");
+	tail = argv[1];
+	while (enif_get_list_cell(env, tail, &head, &tail)) {
+		if (enif_is_identical(head, psatom)) {
+			preserve = 1;
+		}
+	}
+	if (preserve) {
+		cairo_fill_preserve(ctx->cairo);
+	} else {
+		cairo_fill(ctx->cairo);
+	}
 	return OP_OK;
 }
 

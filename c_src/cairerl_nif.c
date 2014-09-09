@@ -394,12 +394,18 @@ handle_op_fill(ErlNifEnv *env, struct context *ctx, const ERL_NIF_TERM *argv, in
 }
 
 static enum op_return
-handle_op_set_source(ErlNifEnv *env, struct context *ctx, const ERL_NIF_TERM *argv, int argc)
+handle_op_set_line_width(ErlNifEnv *env, struct context *ctx, const ERL_NIF_TERM *argv, int argc)
 {
+	double lw;
 	if (ctx->cairo == NULL)
 		return ERR_NOT_INIT;
 	if (argc != 1)
 		return ERR_BAD_ARGS;
+
+	if (!get_tag_double(env, ctx, argv[0], &lw))
+		return ERR_BAD_ARGS;
+
+	cairo_set_line_width(ctx->cairo, lw);
 	return OP_OK;
 }
 
@@ -502,8 +508,8 @@ static struct op_handler op_handlers[] = {
 	{"cairo_close_path", handle_op_close_path},
 
 	/* rendering operations */
-	/*{"cairo_set_line_width", handle_op_set_line_width},*/
-	{"cairo_set_source", handle_op_set_source},
+	{"cairo_set_line_width", handle_op_set_line_width},
+	/*{"cairo_set_source", handle_op_set_source},*/
 	{"cairo_set_source_rgba", handle_op_set_source_rgba},
 	{"cairo_set_antialias", handle_op_set_aa},
 	/*{"cairo_set_fill_rule", handle_op_set_fill_rule},*/
@@ -561,7 +567,6 @@ handle_op(ErlNifEnv *env, struct context *ctx, ERL_NIF_TERM op)
 					candidates[i] = NULL;
 					--ncand;
 				} else if (ncand == 1) {
-					fprintf(stderr, "running op %s\r\n", candidates[i]->name);
 					return candidates[i]->handler(env, ctx, &args[1], arity - 1);
 				} else if (ncand == 0) {
 					break;

@@ -59,15 +59,15 @@
 
 % pattern operations
 -record(cairo_pattern_create_linear, {tag :: atom(), x :: cairerl:value(), y :: cairerl:value(), x2 :: cairerl:value(), y2 :: cairerl:value()}).
--record(cairo_pattern_create_for_surface, {image :: cairerl:image()}).
+-record(cairo_pattern_create_for_surface, {tag :: atom(), image :: cairerl:image()}).
 -record(cairo_pattern_add_color_stop_rgba, {tag :: atom(), offset :: float(), r :: float(), g :: float(), b :: float()}).
--record(cairo_pattern_translate, {tag :: atom(), x :: cairerl:value(), y :: cairerl:value()}).
+-record(cairo_pattern_translate, {tag :: atom(), x = 0.0 :: cairerl:value(), y = 0.0 :: cairerl:value()}).
 
 % transform operations
 -record(cairo_identity_matrix, {}).
--record(cairo_translate, {x :: cairerl:value(), y :: cairerl:value()}).
--record(cairo_scale, {x :: cairerl:value(), y :: cairerl:value()}).
--record(cairo_rotate, {angle :: cairerl:value()}).
+-record(cairo_translate, {x = 0.0 :: cairerl:value(), y = 0.0 :: cairerl:value()}).
+-record(cairo_scale, {x = 1.0 :: cairerl:value(), y = 1.0 :: cairerl:value()}).
+-record(cairo_rotate, {angle = 0.0 :: cairerl:value()}).
 
 % text operations
 -record(cairo_text_extents, {text :: binary(), tag :: atom()}).

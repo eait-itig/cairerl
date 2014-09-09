@@ -116,6 +116,25 @@ get_tag_double(ErlNifEnv *env, struct context *ctx, const ERL_NIF_TERM tagOrValu
 	}
 }
 
+static void *
+get_tag_ptr(ErlNifEnv *env, struct context *ctx, enum tag_type type, const ERL_NIF_TERM tag)
+{
+	struct tag_node node;
+	struct tag_node *found;
+
+	memset(&node, 0, sizeof(node));
+	node.tag = tag;
+
+	found = RB_FIND(tag_tree, &ctx->tag_head, &node);
+	if (found == NULL)
+		return NULL;
+
+	if (found->type != type)
+		return NULL;
+
+	return found->v_ptr;
+}
+
 static enum op_return
 set_tag_double(ErlNifEnv *env, struct context *ctx, const ERL_NIF_TERM tag, double value)
 {
@@ -143,6 +162,7 @@ set_tag_ptr(ErlNifEnv *env, struct context *ctx, const ERL_NIF_TERM tag, enum ta
 	struct tag_node *tn, *rn;
 
 	tn = enif_alloc(sizeof(*tn));
+	assert(tn != NULL);
 	memset(tn, 0, sizeof(*tn));
 
 	tn->tag = tag;
@@ -156,6 +176,80 @@ set_tag_ptr(ErlNifEnv *env, struct context *ctx, const ERL_NIF_TERM tag, enum ta
 	}
 
 	return OP_OK;
+}
+
+static int
+create_surface_from_image(ErlNifEnv *env, const ERL_NIF_TERM image, cairo_surface_t **sfc, ERL_NIF_TERM *err)
+{
+	ErlNifBinary pixels;
+	cairo_status_t status;
+	cairo_format_t fmt;
+	int arity;
+	const ERL_NIF_TERM *img_tuple;
+	int w, h, stride;
+
+	arity = 5;
+	if (!enif_get_tuple(env, image, &arity, &img_tuple)) {
+		if (err != NULL)
+			*err = enif_make_atom(env, "bad_pixels");
+		goto fail;
+	}
+
+	if (arity != 5 || !enif_is_identical(img_tuple[0], enif_make_atom(env, "cairo_image"))) {
+		if (err != NULL)
+			*err = enif_make_atom(env, "bad_record");
+		goto fail;
+	}
+	if (!enif_inspect_binary(env, img_tuple[4], &pixels)) {
+		if (err != NULL)
+			*err = enif_make_atom(env, "bad_pixel_data");
+		goto fail;
+	}
+
+	/* get dimensions from the record */
+	if (!enif_get_int(env, img_tuple[1], &w)) {
+		if (err != NULL)
+			*err = enif_make_atom(env, "bad_width");
+		goto fail;
+	}
+	if (!enif_get_int(env, img_tuple[2], &h)) {
+		if (err != NULL)
+			*err = enif_make_atom(env, "bad_height");
+		goto fail;
+	}
+
+	if (enif_is_identical(img_tuple[3], enif_make_atom(env, "rgb24"))) {
+		fmt = CAIRO_FORMAT_RGB24;
+	} else if (enif_is_identical(img_tuple[3], enif_make_atom(env, "argb32"))) {
+		fmt = CAIRO_FORMAT_ARGB32;
+	} else if (enif_is_identical(img_tuple[3], enif_make_atom(env, "rgb30"))) {
+		fmt = CAIRO_FORMAT_RGB30;
+	} else if (enif_is_identical(img_tuple[3], enif_make_atom(env, "rgb16_565"))) {
+		fmt = CAIRO_FORMAT_RGB16_565;
+	} else {
+		if (err != NULL)
+			*err = enif_make_atom(env, "bad_pixel_format");
+		goto fail;
+	}
+
+	stride = cairo_format_stride_for_width(fmt, w);
+	*sfc = cairo_image_surface_create_for_data(
+			pixels.data, fmt, w, h, stride);
+
+	if ((status = cairo_surface_status(*sfc)) != CAIRO_STATUS_SUCCESS) {
+		if (err != NULL)
+			*err = enif_make_tuple2(env,
+				enif_make_atom(env, "bad_surface_status"), enif_make_int(env, status));
+		goto fail;
+	}
+
+	return 1;
+fail:
+	if (*sfc != NULL) {
+		cairo_surface_destroy(*sfc);
+		*sfc = NULL;
+	}
+	return 0;
 }
 
 static enum op_return
@@ -455,6 +549,144 @@ handle_op_set_tag(ErlNifEnv *env, struct context *ctx, const ERL_NIF_TERM *argv,
 }
 
 static enum op_return
+handle_op_pattern_create_for_surface(ErlNifEnv *env, struct context *ctx, const ERL_NIF_TERM *argv, int argc)
+{
+	cairo_surface_t *sfc = NULL;
+	cairo_pattern_t *ptn = NULL;
+
+	if (ctx->cairo == NULL)
+		return ERR_NOT_INIT;
+	if (argc != 2)
+		return ERR_BAD_ARGS;
+
+	if (!create_surface_from_image(env, argv[1], &sfc, NULL))
+		return ERR_FAILURE;
+
+	ptn = cairo_pattern_create_for_surface(sfc);
+	if (cairo_pattern_status(ptn) != CAIRO_STATUS_SUCCESS) {
+		cairo_surface_destroy(sfc);
+		return ERR_FAILURE;
+	}
+
+	cairo_surface_destroy(sfc);
+
+	return set_tag_ptr(env, ctx, argv[0], TAG_PATTERN, ptn);
+}
+
+static enum op_return
+handle_op_set_source(ErlNifEnv *env, struct context *ctx, const ERL_NIF_TERM *argv, int argc)
+{
+	cairo_pattern_t *ptn = NULL;
+
+	if (ctx->cairo == NULL)
+		return ERR_NOT_INIT;
+	if (argc != 1)
+		return ERR_BAD_ARGS;
+
+	ptn = (cairo_pattern_t *)get_tag_ptr(env, ctx, TAG_PATTERN, argv[0]);
+	if (ptn == NULL)
+		return ERR_BAD_ARGS;
+
+	cairo_set_source(ctx->cairo, ptn);
+
+	return OP_OK;
+}
+
+static enum op_return
+handle_op_pattern_translate(ErlNifEnv *env, struct context *ctx, const ERL_NIF_TERM *argv, int argc)
+{
+	cairo_pattern_t *ptn = NULL;
+	double x, y;
+	cairo_matrix_t m;
+
+	if (ctx->cairo == NULL)
+		return ERR_NOT_INIT;
+	if (argc != 3)
+		return ERR_BAD_ARGS;
+
+	if (!get_tag_double(env, ctx, argv[1], &x))
+		return ERR_BAD_ARGS;
+	if (!get_tag_double(env, ctx, argv[2], &y))
+		return ERR_BAD_ARGS;
+
+	ptn = (cairo_pattern_t *)get_tag_ptr(env, ctx, TAG_PATTERN, argv[0]);
+	if (ptn == NULL)
+		return ERR_BAD_ARGS;
+
+	cairo_pattern_get_matrix(ptn, &m);
+	cairo_matrix_translate(&m, x, y);
+	cairo_pattern_set_matrix(ptn, &m);
+
+	return OP_OK;
+}
+
+static enum op_return
+handle_op_set_font_size(ErlNifEnv *env, struct context *ctx, const ERL_NIF_TERM *argv, int argc)
+{
+	double size;
+
+	if (ctx->cairo == NULL)
+		return ERR_NOT_INIT;
+	if (argc != 1)
+		return ERR_BAD_ARGS;
+
+	if (!get_tag_double(env, ctx, argv[0], &size))
+		return ERR_BAD_ARGS;
+
+	cairo_set_font_size(ctx->cairo, size);
+	return OP_OK;
+}
+
+static enum op_return
+handle_op_select_font_face(ErlNifEnv *env, struct context *ctx, const ERL_NIF_TERM *argv, int argc)
+{
+	char facebuf[256];
+	ErlNifBinary facebin;
+	cairo_font_slant_t slant;
+	cairo_font_weight_t weight;
+
+	if (ctx->cairo == NULL)
+		return ERR_NOT_INIT;
+	if (argc != 3)
+		return ERR_BAD_ARGS;
+
+	memset(&facebin, 0, sizeof(facebin));
+	memset(facebuf, 0, sizeof(facebuf));
+
+	/* get the font family name */
+	if (!enif_inspect_binary(env, argv[0], &facebin)) {
+		if (!enif_inspect_iolist_as_binary(env, argv[0], &facebin)) {
+			return ERR_BAD_ARGS;
+		}
+	}
+	assert(facebin.size < sizeof(facebuf) - 1);
+	memcpy(facebuf, facebin.data, facebin.size);
+	facebuf[facebin.size] = 0;
+
+	if (enif_is_identical(argv[1], enif_make_atom(env, "normal"))) {
+		slant = CAIRO_FONT_SLANT_NORMAL;
+	} else if (enif_is_identical(argv[1], enif_make_atom(env, "italic"))) {
+		slant = CAIRO_FONT_SLANT_ITALIC;
+	} else if (enif_is_identical(argv[1], enif_make_atom(env, "oblique"))) {
+		slant = CAIRO_FONT_SLANT_OBLIQUE;
+	} else {
+		return ERR_BAD_ARGS;
+	}
+
+	if (enif_is_identical(argv[2], enif_make_atom(env, "normal"))) {
+		weight = CAIRO_FONT_WEIGHT_NORMAL;
+	} else if (enif_is_identical(argv[2], enif_make_atom(env, "bold"))) {
+		weight = CAIRO_FONT_WEIGHT_BOLD;
+	} else {
+		return ERR_BAD_ARGS;
+	}
+
+	cairo_select_font_face(ctx->cairo, facebuf, slant, weight);
+
+	return OP_OK;
+}
+
+static enum op_return
 handle_op_tag_deref(ErlNifEnv *env, struct context *ctx, const ERL_NIF_TERM *argv, int argc)
 {
 	struct tag_node node;
@@ -539,7 +771,7 @@ static struct op_handler op_handlers[] = {
 
 	/* rendering operations */
 	{"cairo_set_line_width", handle_op_set_line_width},
-	/*{"cairo_set_source", handle_op_set_source},*/
+	{"cairo_set_source", handle_op_set_source},
 	{"cairo_set_source_rgba", handle_op_set_source_rgba},
 	{"cairo_set_antialias", handle_op_set_aa},
 	/*{"cairo_set_fill_rule", handle_op_set_fill_rule},*/
@@ -551,8 +783,8 @@ static struct op_handler op_handlers[] = {
 	/* pattern operations */
 	/*{"cairo_pattern_create_linear", handle_op_pattern_create_linear},*/
 	/*{"cairo_pattern_add_color_stop_rgba", handle_op_pattern_add_color_stop_rgba},*/
-	/*{"cairo_pattern_create_for_surfce", handle_op_pattern_create_surface},*/
-	/*{"cairo_pattern_translate", handle_op_pattern_translate},*/
+	{"cairo_pattern_create_for_surface", handle_op_pattern_create_for_surface},
+	{"cairo_pattern_translate", handle_op_pattern_translate},
 
 	/* transform operations */
 	{"cairo_identity_matrix", handle_op_identity_matrix},
@@ -562,8 +794,8 @@ static struct op_handler op_handlers[] = {
 
 	/* text operations */
 	/*{"cairo_text_extents", handle_op_text_extents},*/
-	/*{"cairo_select_font_face", handle_op_select_font_face},*/
-	/*{"cairo_set_font_size", handle_op_set_font_size},*/
+	{"cairo_select_font_face", handle_op_select_font_face},
+	{"cairo_set_font_size", handle_op_set_font_size},
 	/*{"cairo_show_text", handle_op_show_text},*/
 
 	/* tag ops */
@@ -576,9 +808,9 @@ static enum op_return
 handle_op(ErlNifEnv *env, struct context *ctx, ERL_NIF_TERM op)
 {
 	int arity = 16;
-	int namesz = 32;
+	int namesz = 64;
 	const ERL_NIF_TERM *args;
-	char namebuf[32];
+	char namebuf[64];
 	int i, idx = 0;
 	struct op_handler *candidates[n_handlers];
 	int ncand = n_handlers;
@@ -594,11 +826,11 @@ handle_op(ErlNifEnv *env, struct context *ctx, ERL_NIF_TERM op)
 	for (; idx < namesz; ++idx) {
 		for (i = 0; i < n_handlers; ++i) {
 			if (candidates[i] != NULL) {
-				if (candidates[i]->name[idx] == 0 ||
+				if ((namebuf[idx] != 0 && candidates[i]->name[idx] == 0) ||
 						candidates[i]->name[idx] != namebuf[idx]) {
 					candidates[i] = NULL;
 					--ncand;
-				} else if (ncand == 1) {
+				} else if ((namebuf[idx] == 0 && candidates[i]->name[idx] == 0) || ncand == 1) {
 					return candidates[i]->handler(env, ctx, &args[1], arity - 1);
 				} else if (ncand == 0) {
 					break;
@@ -935,53 +1167,11 @@ fail:
 static ERL_NIF_TERM
 png_write(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
-	const ERL_NIF_TERM *img_tuple;
-	cairo_surface_t *sfc = NULL;
-	cairo_format_t fmt;
-	ErlNifBinary pixels, fname;
+	ErlNifBinary fname;
 	char fnamebuf[256];
 	cairo_status_t status;
-	int arity;
+	cairo_surface_t *sfc = NULL;
 	ERL_NIF_TERM err;
-	int w, h, stride;
-
-	arity = 5;
-	if (!enif_get_tuple(env, argv[0], &arity, &img_tuple)) {
-		err = enif_make_atom(env, "bad_pixels");
-		goto fail;
-	}
-
-	if (arity != 5 || !enif_is_identical(img_tuple[0], enif_make_atom(env, "cairo_image"))) {
-		err = enif_make_atom(env, "bad_record");
-		goto fail;
-	}
-	if (!enif_inspect_binary(env, img_tuple[4], &pixels)) {
-		err = enif_make_atom(env, "bad_pixel_data");
-		goto fail;
-	}
-
-	/* get dimensions from the record */
-	if (!enif_get_int(env, img_tuple[1], &w)) {
-		err = enif_make_atom(env, "bad_width");
-		goto fail;
-	}
-	if (!enif_get_int(env, img_tuple[2], &h)) {
-		err = enif_make_atom(env, "bad_height");
-		goto fail;
-	}
-
-	if (enif_is_identical(img_tuple[3], enif_make_atom(env, "rgb24"))) {
-		fmt = CAIRO_FORMAT_RGB24;
-	} else if (enif_is_identical(img_tuple[3], enif_make_atom(env, "argb32"))) {
-		fmt = CAIRO_FORMAT_ARGB32;
-	} else if (enif_is_identical(img_tuple[3], enif_make_atom(env, "rgb30"))) {
-		fmt = CAIRO_FORMAT_RGB30;
-	} else if (enif_is_identical(img_tuple[3], enif_make_atom(env, "rgb16_565"))) {
-		fmt = CAIRO_FORMAT_RGB16_565;
-	} else {
-		err = enif_make_atom(env, "bad_pixel_format");
-		goto fail;
-	}
 
 	/* get the filename to write to */
 	if (!enif_inspect_binary(env, argv[1], &fname)) {
@@ -994,15 +1184,8 @@ png_write(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 	memcpy(fnamebuf, fname.data, fname.size);
 	fnamebuf[fname.size] = 0;
 
-	/* allocate and fill the bitmap and cairo context */
-	stride = cairo_format_stride_for_width(fmt, w);
-	sfc = cairo_image_surface_create_for_data(
-			pixels.data, fmt, w, h, stride);
-
-	if ((status = cairo_surface_status(sfc)) != CAIRO_STATUS_SUCCESS) {
-		err = enif_make_tuple2(env, enif_make_atom(env, "bad_surface_status"), enif_make_int(env, status));
+	if (!create_surface_from_image(env, argv[0], &sfc, &err))
 		goto fail;
-	}
 
 	if ((status = cairo_surface_write_to_png(sfc, fnamebuf)) != CAIRO_STATUS_SUCCESS) {
 		err = enif_make_tuple2(env, enif_make_atom(env, "bad_write_status"), enif_make_int(env, status));

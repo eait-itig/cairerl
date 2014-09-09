@@ -28,7 +28,7 @@
 
 -module(cairerl_nif).
 
--export([draw/3]).
+-export([draw/3, png_read/1, png_write/2]).
 -on_load(init/0).
 
 -include("cairerl.hrl").
@@ -47,4 +47,12 @@ init() ->
 -type tags() :: [{atom(), float() | tags()}].
 -spec draw(Pixels :: cairerl:image(), InitTags :: tags(), Ops :: [cairerl:op()]) -> {ok, tags(), cairerl:image()} | {error, term()}.
 draw(_Pixels, _InitTags, _Ops) ->
+	error(bad_nif).
+
+-spec png_write(Pixels :: cairerl:image(), Filename :: binary() | iolist()) -> ok | {error, term()}.
+png_write(_Pixels, _Filename) ->
+	error(bad_nif).
+
+-spec png_read(Filename :: binary() | iolist()) -> {ok, cairerl:image()} | {error, term()}.
+png_read(_Filename) ->
 	error(bad_nif).

@@ -26,7 +26,7 @@
 %% POSSIBILITY OF SUCH DAMAGE.
 %%
 
--record(cairo_image, {width :: integer(), height :: integer(), data :: binary()}).
+-record(cairo_image, {width :: integer(), height :: integer(), format = rgb24 :: cairerl:pixel_format(), data :: binary()}).
 -record(cairo_tag_text_extents, {x_bearing :: float(), y_bearing :: float(), width :: float(), height :: float(), x_advance :: float(), y_advance :: float()}).
 -record(cairo_tag_pattern, {type :: solid | surface | linear | radial | mesh | raster}).
 -record(cairo_tag_path, {size :: integer()}).
@@ -59,7 +59,9 @@
 
 % pattern operations
 -record(cairo_pattern_create_linear, {tag :: atom(), x :: cairerl:value(), y :: cairerl:value(), x2 :: cairerl:value(), y2 :: cairerl:value()}).
+-record(cairo_pattern_create_for_surface, {image :: cairerl:image()}).
 -record(cairo_pattern_add_color_stop_rgba, {tag :: atom(), offset :: float(), r :: float(), g :: float(), b :: float()}).
+-record(cairo_pattern_translate, {tag :: atom(), x :: cairerl:value(), y :: cairerl:value()}).
 
 % transform operations
 -record(cairo_identity_matrix, {}).

@@ -252,7 +252,7 @@ handle_op_move_to(ErlNifEnv *env, struct context *ctx, const ERL_NIF_TERM *argv,
 
 	if (ctx->cairo == NULL)
 		return ERR_NOT_INIT;
-	if (argc != 2)
+	if (argc != 3)
 		return ERR_BAD_ARGS;
 
 	if (!get_tag_double(env, ctx, argv[0], &x))
@@ -261,7 +261,7 @@ handle_op_move_to(ErlNifEnv *env, struct context *ctx, const ERL_NIF_TERM *argv,
 		return ERR_BAD_ARGS;
 
 	relatom = enif_make_atom(env, "relative");
-	tail = argv[0];
+	tail = argv[2];
 	while (enif_get_list_cell(env, tail, &head, &tail)) {
 		if (enif_is_identical(head, relatom)) {
 			relative = 1;
@@ -284,7 +284,7 @@ handle_op_line_to(ErlNifEnv *env, struct context *ctx, const ERL_NIF_TERM *argv,
 
 	if (ctx->cairo == NULL)
 		return ERR_NOT_INIT;
-	if (argc != 2)
+	if (argc != 3)
 		return ERR_BAD_ARGS;
 
 	if (!get_tag_double(env, ctx, argv[0], &x))
@@ -293,7 +293,7 @@ handle_op_line_to(ErlNifEnv *env, struct context *ctx, const ERL_NIF_TERM *argv,
 		return ERR_BAD_ARGS;
 
 	relatom = enif_make_atom(env, "relative");
-	tail = argv[0];
+	tail = argv[2];
 	while (enif_get_list_cell(env, tail, &head, &tail)) {
 		if (enif_is_identical(head, relatom)) {
 			relative = 1;
@@ -551,6 +551,8 @@ static struct op_handler op_handlers[] = {
 	/* pattern operations */
 	/*{"cairo_pattern_create_linear", handle_op_pattern_create_linear},*/
 	/*{"cairo_pattern_add_color_stop_rgba", handle_op_pattern_add_color_stop_rgba},*/
+	/*{"cairo_pattern_create_for_surfce", handle_op_pattern_create_surface},*/
+	/*{"cairo_pattern_translate", handle_op_pattern_translate},*/
 
 	/* transform operations */
 	{"cairo_identity_matrix", handle_op_identity_matrix},
@@ -618,19 +620,23 @@ draw(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 	int arity, status, stride;
 	const ERL_NIF_TERM *tuple;
 	const ERL_NIF_TERM *img_tuple;
-	ERL_NIF_TERM out_tuple[4];
+	ERL_NIF_TERM out_tuple[5];
 
-	arity = 4;
+	arity = 5;
 	if (!enif_get_tuple(env, argv[0], &arity, &img_tuple)) {
 		err = enif_make_atom(env, "bad_pixels");
 		goto fail;
 	}
-	if (!enif_is_identical(img_tuple[0], enif_make_atom(env, "cairo_image"))) {
+	if (arity != 5 || !enif_is_identical(img_tuple[0], enif_make_atom(env, "cairo_image"))) {
 		err = enif_make_atom(env, "bad_record");
 		goto fail;
 	}
-	if (!enif_inspect_binary(env, img_tuple[3], &pixels)) {
-		err = enif_make_atom(env, "bad_pixels_binary");
+	if (!enif_is_identical(img_tuple[3], enif_make_atom(env, "rgb24"))) {
+		err = enif_make_atom(env, "bad_pixel_format");
+		goto fail;
+	}
+	if (!enif_inspect_binary(env, img_tuple[4], &pixels)) {
+		err = enif_make_atom(env, "bad_pixel_data");
 		goto fail;
 	}
 
@@ -675,6 +681,10 @@ draw(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 	while (enif_get_list_cell(env, tail, &head, &tail)) {
 		arity = 2;
 		if (!enif_get_tuple(env, head, &arity, &tuple)) {
+			err = enif_make_atom(env, "bad_init_args");
+			goto fail;
+		}
+		if (arity != 2) {
 			err = enif_make_atom(env, "bad_init_args");
 			goto fail;
 		}
@@ -732,8 +742,9 @@ draw(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 	out_tuple[0] = enif_make_atom(env, "cairo_image");
 	out_tuple[1] = enif_make_int(env, ctx->w);
 	out_tuple[2] = enif_make_int(env, ctx->h);
+	out_tuple[3] = enif_make_atom(env, "rgb24");
 	cairo_surface_finish(ctx->sfc);
-	out_tuple[3] = enif_make_binary(env, &ctx->out);
+	out_tuple[4] = enif_make_binary(env, &ctx->out);
 
 	out_tags = enif_make_list(env, 0);
 	for (tn = RB_MIN(tag_tree, &ctx->tag_head); tn != NULL; tn = tn_next) {
@@ -802,7 +813,7 @@ draw(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 	ret = enif_make_tuple3(env,
 		enif_make_atom(env, "ok"),
 		out_tags,
-		enif_make_tuple_from_array(env, out_tuple, 4));
+		enif_make_tuple_from_array(env, out_tuple, 5));
 	goto free_and_exit;
 
 fail:
@@ -843,6 +854,99 @@ free_and_exit:
 	return ret;
 }
 
+static ERL_NIF_TERM
+png_read(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+{
+	return enif_make_atom(env, "ok");
+}
+
+static ERL_NIF_TERM
+png_write(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+{
+	const ERL_NIF_TERM *img_tuple;
+	cairo_surface_t *sfc = NULL;
+	cairo_format_t fmt;
+	ErlNifBinary pixels, fname;
+	char fnamebuf[256];
+	cairo_status_t status;
+	int arity;
+	ERL_NIF_TERM err;
+	int w, h, stride;
+
+	arity = 5;
+	if (!enif_get_tuple(env, argv[0], &arity, &img_tuple)) {
+		err = enif_make_atom(env, "bad_pixels");
+		goto fail;
+	}
+
+	if (arity != 5 || !enif_is_identical(img_tuple[0], enif_make_atom(env, "cairo_image"))) {
+		err = enif_make_atom(env, "bad_record");
+		goto fail;
+	}
+	if (!enif_inspect_binary(env, img_tuple[4], &pixels)) {
+		err = enif_make_atom(env, "bad_pixel_data");
+		goto fail;
+	}
+
+	/* get dimensions from the record */
+	if (!enif_get_int(env, img_tuple[1], &w)) {
+		err = enif_make_atom(env, "bad_width");
+		goto fail;
+	}
+	if (!enif_get_int(env, img_tuple[2], &h)) {
+		err = enif_make_atom(env, "bad_height");
+		goto fail;
+	}
+
+	if (enif_is_identical(img_tuple[3], enif_make_atom(env, "rgb24"))) {
+		fmt = CAIRO_FORMAT_RGB24;
+	} else if (enif_is_identical(img_tuple[3], enif_make_atom(env, "argb32"))) {
+		fmt = CAIRO_FORMAT_ARGB32;
+	} else if (enif_is_identical(img_tuple[3], enif_make_atom(env, "rgb30"))) {
+		fmt = CAIRO_FORMAT_RGB30;
+	} else if (enif_is_identical(img_tuple[3], enif_make_atom(env, "rgb16_565"))) {
+		fmt = CAIRO_FORMAT_RGB16_565;
+	} else {
+		err = enif_make_atom(env, "bad_pixel_format");
+		goto fail;
+	}
+
+	/* get the filename to write to */
+	if (!enif_inspect_binary(env, argv[1], &fname)) {
+		if (!enif_inspect_iolist_as_binary(env, argv[1], &fname)) {
+			err = enif_make_atom(env, "bad_filename");
+			goto fail;
+		}
+	}
+	assert(fname.size < 255);
+	memcpy(fnamebuf, fname.data, fname.size);
+	fnamebuf[fname.size] = 0;
+
+	/* allocate and fill the bitmap and cairo context */
+	stride = cairo_format_stride_for_width(fmt, w);
+	sfc = cairo_image_surface_create_for_data(
+			pixels.data, fmt, w, h, stride);
+
+	if ((status = cairo_surface_status(sfc)) != CAIRO_STATUS_SUCCESS) {
+		err = enif_make_tuple2(env, enif_make_atom(env, "bad_surface_status"), enif_make_int(env, status));
+		goto fail;
+	}
+
+	if ((status = cairo_surface_write_to_png(sfc, fnamebuf)) != CAIRO_STATUS_SUCCESS) {
+		err = enif_make_tuple2(env, enif_make_atom(env, "bad_write_status"), enif_make_int(env, status));
+		goto fail;
+	}
+
+	cairo_surface_destroy(sfc);
+
+	return enif_make_atom(env, "ok");
+
+fail:
+	if (sfc != NULL)
+		cairo_surface_destroy(sfc);
+	return enif_make_tuple2(env, enif_make_atom(env, "error"), err);
+}
+
 static int
 load_cb(ErlNifEnv *env, void **priv_data, ERL_NIF_TERM load_info)
 {
@@ -856,7 +960,9 @@ unload_cb(ErlNifEnv *env, void *priv_data)
 
 static ErlNifFunc nif_funcs[] =
 {
-	{"draw", 3, draw}
+	{"draw", 3, draw},
+	{"png_read", 1, png_read},
+	{"png_write", 2, png_write}
 };
 
 ERL_NIF_INIT(cairerl_nif, nif_funcs, load_cb, NULL, NULL, unload_cb)

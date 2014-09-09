@@ -34,8 +34,9 @@
 -type tag() :: atom().
 -type value() :: float() | tag().
 -type image() :: #cairo_image{}.
+-type pixel_format() :: rgb24 | argb32 | rgb16_565 | rgb30.
 
 -type op() :: tuple().
 
 
--export_type([antialias_mode/0, tag/0, value/0, op/0, image/0]).
+-export_type([antialias_mode/0, tag/0, value/0, op/0, image/0, pixel_format/0]).

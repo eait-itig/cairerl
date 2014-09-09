@@ -191,6 +191,36 @@ handle_op_close_path(ErlNifEnv *env, struct context *ctx, const ERL_NIF_TERM *ar
 }
 
 static enum op_return
+handle_op_identity_matrix(ErlNifEnv *env, struct context *ctx, const ERL_NIF_TERM *argv, int argc)
+{
+	if (ctx->cairo == NULL)
+		return ERR_NOT_INIT;
+	if (argc != 0)
+		return ERR_BAD_ARGS;
+	cairo_identity_matrix(ctx->cairo);
+	return OP_OK;
+}
+
+static enum op_return
+handle_op_translate(ErlNifEnv *env, struct context *ctx, const ERL_NIF_TERM *argv, int argc)
+{
+	double x, y;
+	if (ctx->cairo == NULL)
+		return ERR_NOT_INIT;
+	if (argc != 2)
+		return ERR_BAD_ARGS;
+
+	if (!get_tag_double(env, ctx, argv[0], &x))
+		return ERR_BAD_ARGS;
+	if (!get_tag_double(env, ctx, argv[1], &y))
+		return ERR_BAD_ARGS;
+
+	cairo_translate(ctx->cairo, x, y);
+
+	return OP_OK;
+}
+
+static enum op_return
 handle_op_rectangle(ErlNifEnv *env, struct context *ctx, const ERL_NIF_TERM *argv, int argc)
 {
 	double x, y, w, h;
@@ -523,8 +553,8 @@ static struct op_handler op_handlers[] = {
 	/*{"cairo_pattern_add_color_stop_rgba", handle_op_pattern_add_color_stop_rgba},*/
 
 	/* transform operations */
-	/*{"cairo_identity_matrix", handle_op_identity_matrix},*/
-	/*{"cairo_translate", handle_op_translate},*/
+	{"cairo_identity_matrix", handle_op_identity_matrix},
+	{"cairo_translate", handle_op_translate},
 	/*{"cairo_scale", handle_op_scale},*/
 	/*{"cairo_rotate", handle_op_rotate},*/
 

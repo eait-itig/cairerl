@@ -75,6 +75,7 @@ enum op_return {
 	ERR_NOT_INIT = -4,
 	ERR_FAILURE = -5,
 	ERR_TAG_ALREADY = -6,
+	ERR_TAG_NOT_SET = -7,
 	ERR_BAD_ARGS = -10
 };
 
@@ -168,6 +169,28 @@ handle_op_arc(ErlNifEnv *env, struct context *ctx, const ERL_NIF_TERM *argv, int
 }
 
 static enum op_return
+handle_op_new_sub_path(ErlNifEnv *env, struct context *ctx, const ERL_NIF_TERM *argv, int argc)
+{
+	if (ctx->cairo == NULL)
+		return ERR_NOT_INIT;
+	if (argc != 0)
+		return ERR_BAD_ARGS;
+	cairo_new_sub_path(ctx->cairo);
+	return OP_OK;
+}
+
+static enum op_return
+handle_op_close_path(ErlNifEnv *env, struct context *ctx, const ERL_NIF_TERM *argv, int argc)
+{
+	if (ctx->cairo == NULL)
+		return ERR_NOT_INIT;
+	if (argc != 0)
+		return ERR_BAD_ARGS;
+	cairo_close_path(ctx->cairo);
+	return OP_OK;
+}
+
+static enum op_return
 handle_op_rectangle(ErlNifEnv *env, struct context *ctx, const ERL_NIF_TERM *argv, int argc)
 {
 	double x, y, w, h;
@@ -191,6 +214,70 @@ handle_op_rectangle(ErlNifEnv *env, struct context *ctx, const ERL_NIF_TERM *arg
 }
 
 static enum op_return
+handle_op_move_to(ErlNifEnv *env, struct context *ctx, const ERL_NIF_TERM *argv, int argc)
+{
+	double x, y;
+	int relative = 0;
+	ERL_NIF_TERM head, tail, relatom;
+
+	if (ctx->cairo == NULL)
+		return ERR_NOT_INIT;
+	if (argc != 2)
+		return ERR_BAD_ARGS;
+
+	if (!get_tag_double(env, ctx, argv[0], &x))
+		return ERR_BAD_ARGS;
+	if (!get_tag_double(env, ctx, argv[1], &y))
+		return ERR_BAD_ARGS;
+
+	relatom = enif_make_atom(env, "relative");
+	tail = argv[0];
+	while (enif_get_list_cell(env, tail, &head, &tail)) {
+		if (enif_is_identical(head, relatom)) {
+			relative = 1;
+		}
+	}
+	if (relative) {
+		cairo_rel_move_to(ctx->cairo, x, y);
+	} else {
+		cairo_move_to(ctx->cairo, x, y);
+	}
+	return OP_OK;
+}
+
+static enum op_return
+handle_op_line_to(ErlNifEnv *env, struct context *ctx, const ERL_NIF_TERM *argv, int argc)
+{
+	double x, y;
+	int relative = 0;
+	ERL_NIF_TERM head, tail, relatom;
+
+	if (ctx->cairo == NULL)
+		return ERR_NOT_INIT;
+	if (argc != 2)
+		return ERR_BAD_ARGS;
+
+	if (!get_tag_double(env, ctx, argv[0], &x))
+		return ERR_BAD_ARGS;
+	if (!get_tag_double(env, ctx, argv[1], &y))
+		return ERR_BAD_ARGS;
+
+	relatom = enif_make_atom(env, "relative");
+	tail = argv[0];
+	while (enif_get_list_cell(env, tail, &head, &tail)) {
+		if (enif_is_identical(head, relatom)) {
+			relative = 1;
+		}
+	}
+	if (relative) {
+		cairo_rel_line_to(ctx->cairo, x, y);
+	} else {
+		cairo_line_to(ctx->cairo, x, y);
+	}
+	return OP_OK;
+}
+
+static enum op_return
 handle_op_set_source_rgba(ErlNifEnv *env, struct context *ctx, const ERL_NIF_TERM *argv, int argc)
 {
 	double r, g, b, a;
@@ -210,6 +297,75 @@ handle_op_set_source_rgba(ErlNifEnv *env, struct context *ctx, const ERL_NIF_TER
 
 	cairo_set_source_rgba(ctx->cairo, r, g, b, a);
 
+	return OP_OK;
+}
+
+static enum op_return
+handle_op_clip(ErlNifEnv *env, struct context *ctx, const ERL_NIF_TERM *argv, int argc)
+{
+	ERL_NIF_TERM head, tail, psatom;
+	int preserve = 0;
+	if (ctx->cairo == NULL)
+		return ERR_NOT_INIT;
+	if (argc != 1)
+		return ERR_BAD_ARGS;
+	psatom = enif_make_atom(env, "preserve");
+	tail = argv[0];
+	while (enif_get_list_cell(env, tail, &head, &tail)) {
+		if (enif_is_identical(head, psatom)) {
+			preserve = 1;
+		}
+	}
+	if (preserve) {
+		cairo_clip_preserve(ctx->cairo);
+	} else {
+		cairo_clip(ctx->cairo);
+	}
+	return OP_OK;
+}
+
+static enum op_return
+handle_op_paint(ErlNifEnv *env, struct context *ctx, const ERL_NIF_TERM *argv, int argc)
+{
+	ERL_NIF_TERM udatom;
+	double alpha;
+	if (ctx->cairo == NULL)
+		return ERR_NOT_INIT;
+	if (argc != 1)
+		return ERR_BAD_ARGS;
+	udatom = enif_make_atom(env, "undefined");
+	if (enif_is_identical(argv[0], udatom)) {
+		cairo_paint(ctx->cairo);
+		return OP_OK;
+	} else {
+		if (!enif_get_double(env, argv[0], &alpha))
+			return ERR_BAD_ARGS;
+		cairo_paint_with_alpha(ctx->cairo, alpha);
+		return OP_OK;
+	}
+}
+
+static enum op_return
+handle_op_stroke(ErlNifEnv *env, struct context *ctx, const ERL_NIF_TERM *argv, int argc)
+{
+	ERL_NIF_TERM head, tail, psatom;
+	int preserve = 0;
+	if (ctx->cairo == NULL)
+		return ERR_NOT_INIT;
+	if (argc != 1)
+		return ERR_BAD_ARGS;
+	psatom = enif_make_atom(env, "preserve");
+	tail = argv[0];
+	while (enif_get_list_cell(env, tail, &head, &tail)) {
+		if (enif_is_identical(head, psatom)) {
+			preserve = 1;
+		}
+	}
+	if (preserve) {
+		cairo_stroke_preserve(ctx->cairo);
+	} else {
+		cairo_stroke(ctx->cairo);
+	}
 	return OP_OK;
 }
 
@@ -248,6 +404,64 @@ handle_op_set_source(ErlNifEnv *env, struct context *ctx, const ERL_NIF_TERM *ar
 }
 
 static enum op_return
+handle_op_set_tag(ErlNifEnv *env, struct context *ctx, const ERL_NIF_TERM *argv, int argc)
+{
+	double val;
+	if (ctx->cairo == NULL)
+		return ERR_NOT_INIT;
+	if (argc != 2)
+		return ERR_BAD_ARGS;
+
+	if (!get_tag_double(env, ctx, argv[1], &val))
+		return ERR_BAD_ARGS;
+
+	return set_tag_double(env, ctx, argv[0], val);
+}
+
+static enum op_return
+handle_op_tag_deref(ErlNifEnv *env, struct context *ctx, const ERL_NIF_TERM *argv, int argc)
+{
+	struct tag_node node;
+	struct tag_node *found;
+	double val;
+
+	if (ctx->cairo == NULL)
+		return ERR_NOT_INIT;
+	if (argc != 3)
+		return ERR_BAD_ARGS;
+
+	memset(&node, 0, sizeof(node));
+	node.tag = argv[0];
+
+	found = RB_FIND(tag_tree, &ctx->tag_head, &node);
+	if (found == NULL)
+		return ERR_TAG_NOT_SET;
+
+	switch (found->type) {
+		case TAG_TEXT_EXTENTS:
+			if (enif_is_identical(argv[1], enif_make_atom(env, "x_bearing"))) {
+				val = found->v_text_exts->x_bearing;
+			} else if (enif_is_identical(argv[1], enif_make_atom(env, "y_bearing"))) {
+				val = found->v_text_exts->y_bearing;
+			} else if (enif_is_identical(argv[1], enif_make_atom(env, "width"))) {
+				val = found->v_text_exts->width;
+			} else if (enif_is_identical(argv[1], enif_make_atom(env, "height"))) {
+				val = found->v_text_exts->height;
+			} else if (enif_is_identical(argv[1], enif_make_atom(env, "x_advance"))) {
+				val = found->v_text_exts->x_advance;
+			} else if (enif_is_identical(argv[1], enif_make_atom(env, "y_advance"))) {
+				val = found->v_text_exts->y_advance;
+			} else {
+				return ERR_BAD_ARGS;
+			}
+			return set_tag_double(env, ctx, argv[2], val);
+
+		default:
+			return ERR_BAD_ARGS;
+	}
+}
+
+static enum op_return
 handle_op_set_aa(ErlNifEnv *env, struct context *ctx, const ERL_NIF_TERM *argv, int argc)
 {
 	struct aa_mode { ERL_NIF_TERM atom; cairo_antialias_t mode; };
@@ -279,12 +493,44 @@ handle_op_set_aa(ErlNifEnv *env, struct context *ctx, const ERL_NIF_TERM *argv, 
 }
 
 static struct op_handler op_handlers[] = {
+	/* path operations */
 	{"cairo_arc", handle_op_arc},
 	{"cairo_rectangle", handle_op_rectangle},
-	{"cairo_set_source_rgba", handle_op_set_source_rgba},
+	{"cairo_new_sub_path", handle_op_new_sub_path},
+	{"cairo_line_to", handle_op_line_to},
+	{"cairo_move_to", handle_op_move_to},
+	{"cairo_close_path", handle_op_close_path},
+
+	/* rendering operations */
+	/*{"cairo_set_line_width", handle_op_set_line_width},*/
 	{"cairo_set_source", handle_op_set_source},
+	{"cairo_set_source_rgba", handle_op_set_source_rgba},
 	{"cairo_set_antialias", handle_op_set_aa},
-	{"cairo_fill", handle_op_fill}
+	/*{"cairo_set_fill_rule", handle_op_set_fill_rule},*/
+	{"cairo_clip", handle_op_clip},
+	{"cairo_stroke", handle_op_stroke},
+	{"cairo_fill", handle_op_fill},
+	{"cairo_paint", handle_op_paint},
+
+	/* pattern operations */
+	/*{"cairo_pattern_create_linear", handle_op_pattern_create_linear},*/
+	/*{"cairo_pattern_add_color_stop_rgba", handle_op_pattern_add_color_stop_rgba},*/
+
+	/* transform operations */
+	/*{"cairo_identity_matrix", handle_op_identity_matrix},*/
+	/*{"cairo_translate", handle_op_translate},*/
+	/*{"cairo_scale", handle_op_scale},*/
+	/*{"cairo_rotate", handle_op_rotate},*/
+
+	/* text operations */
+	/*{"cairo_text_extents", handle_op_text_extents},*/
+	/*{"cairo_select_font_face", handle_op_select_font_face},*/
+	/*{"cairo_set_font_size", handle_op_set_font_size},*/
+	/*{"cairo_show_text", handle_op_show_text},*/
+
+	/* tag ops */
+	{"cairo_set_tag", handle_op_set_tag},
+	{"cairo_tag_deref", handle_op_tag_deref}
 };
 const int n_handlers = sizeof(op_handlers) / sizeof(struct op_handler);
 
@@ -434,6 +680,12 @@ draw(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 				goto fail;
 			case ERR_FAILURE:
 				err = enif_make_tuple2(env, enif_make_atom(env, "cairo_error"), head);
+				goto fail;
+			case ERR_TAG_ALREADY:
+				err = enif_make_tuple2(env, enif_make_atom(env, "tag_already_set"), head);
+				goto fail;
+			case ERR_TAG_NOT_SET:
+				err = enif_make_tuple2(env, enif_make_atom(env, "tag_not_set"), head);
 				goto fail;
 			default:
 				err = enif_make_tuple2(env, enif_make_atom(env, "error"), head);

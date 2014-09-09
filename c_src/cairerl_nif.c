@@ -574,6 +574,59 @@ handle_op_pattern_create_for_surface(ErlNifEnv *env, struct context *ctx, const 
 }
 
 static enum op_return
+handle_op_text_extents(ErlNifEnv *env, struct context *ctx, const ERL_NIF_TERM *argv, int argc)
+{
+	cairo_text_extents_t *exts = NULL;
+	ErlNifBinary textbin;
+
+	if (ctx->cairo == NULL)
+		return ERR_NOT_INIT;
+	if (argc != 2)
+		return ERR_BAD_ARGS;
+
+	memset(&textbin, 0, sizeof(textbin));
+	if (!enif_inspect_binary(env, argv[1], &textbin)) {
+		if (!enif_inspect_iolist_as_binary(env, argv[1], &textbin)) {
+			return ERR_BAD_ARGS;
+		}
+	}
+	if (textbin.data[textbin.size-1] != 0)
+		return ERR_BAD_ARGS;
+
+	exts = enif_alloc(sizeof(*exts));
+	assert(exts != NULL);
+	memset(exts, 0, sizeof(*exts));
+
+	cairo_text_extents(ctx->cairo, (const char *)textbin.data, exts);
+
+	return set_tag_ptr(env, ctx, argv[0], TAG_TEXT_EXTENTS, exts);
+}
+
+static enum op_return
+handle_op_show_text(ErlNifEnv *env, struct context *ctx, const ERL_NIF_TERM *argv, int argc)
+{
+	ErlNifBinary textbin;
+
+	if (ctx->cairo == NULL)
+		return ERR_NOT_INIT;
+	if (argc != 1)
+		return ERR_BAD_ARGS;
+
+	memset(&textbin, 0, sizeof(textbin));
+	if (!enif_inspect_binary(env, argv[0], &textbin)) {
+		if (!enif_inspect_iolist_as_binary(env, argv[0], &textbin)) {
+			return ERR_BAD_ARGS;
+		}
+	}
+	if (textbin.data[textbin.size-1] != 0)
+		return ERR_BAD_ARGS;
+
+	cairo_show_text(ctx->cairo, (const char *)textbin.data);
+
+	return OP_OK;
+}
+
+static enum op_return
 handle_op_set_source(ErlNifEnv *env, struct context *ctx, const ERL_NIF_TERM *argv, int argc)
 {
 	cairo_pattern_t *ptn = NULL;
@@ -793,10 +846,10 @@ static struct op_handler op_handlers[] = {
 	/*{"cairo_rotate", handle_op_rotate},*/
 
 	/* text operations */
-	/*{"cairo_text_extents", handle_op_text_extents},*/
+	{"cairo_text_extents", handle_op_text_extents},
 	{"cairo_select_font_face", handle_op_select_font_face},
 	{"cairo_set_font_size", handle_op_set_font_size},
-	/*{"cairo_show_text", handle_op_show_text},*/
+	{"cairo_show_text", handle_op_show_text},
 
 	/* tag ops */
 	{"cairo_set_tag", handle_op_set_tag},

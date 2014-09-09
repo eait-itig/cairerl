@@ -42,8 +42,8 @@
 -record(cairo_curve_to, {x :: cairerl:value(), y :: cairerl:value(),
 				   x2 :: cairerl:value(), y2 :: cairerl:value(),
 				   x3 :: cairerl:value(), y3 :: cairerl:value(), flags = [] :: [relative]}).
--record(cairo_line_to, {x :: cairerl:value(), y :: cairerl:value(), flags = [] :: [relative]}).
--record(cairo_move_to, {x :: cairerl:value(), y :: cairerl:value(), flags = [] :: [relative]}).
+-record(cairo_line_to, {x = 0.0 :: cairerl:value(), y = 0.0 :: cairerl:value(), flags = [] :: [relative]}).
+-record(cairo_move_to, {x = 0.0 :: cairerl:value(), y = 0.0 :: cairerl:value(), flags = [] :: [relative]}).
 -record(cairo_close_path, {}).
 
 % rendering operations
@@ -70,7 +70,7 @@
 -record(cairo_rotate, {angle = 0.0 :: cairerl:value()}).
 
 % text operations
--record(cairo_text_extents, {text :: binary(), tag :: atom()}).
+-record(cairo_text_extents, {tag :: atom(), text :: binary()}).
 -record(cairo_select_font_face, {family :: binary(), slant = normal :: normal | italic | oblique, weight = normal :: normal | bold}).
 -record(cairo_set_font_size, {size :: float()}).
 -record(cairo_show_text, {text :: binary()}).

@@ -216,11 +216,24 @@ handle_op_set_source_rgba(ErlNifEnv *env, struct context *ctx, const ERL_NIF_TER
 static enum op_return
 handle_op_fill(ErlNifEnv *env, struct context *ctx, const ERL_NIF_TERM *argv, int argc)
 {
+	ERL_NIF_TERM head, tail, psatom;
+	int preserve = 0;
 	if (ctx->cairo == NULL)
 		return ERR_NOT_INIT;
 	if (argc != 1)
 		return ERR_BAD_ARGS;
-	cairo_fill(ctx->cairo);
+	psatom = enif_make_atom(env, "preserve");
+	tail = argv[0];
+	while (enif_get_list_cell(env, tail, &head, &tail)) {
+		if (enif_is_identical(head, psatom)) {
+			preserve = 1;
+		}
+	}
+	if (preserve) {
+		cairo_fill_preserve(ctx->cairo);
+	} else {
+		cairo_fill(ctx->cairo);
+	}
 	return OP_OK;
 }
 
@@ -235,41 +248,42 @@ handle_op_set_source(ErlNifEnv *env, struct context *ctx, const ERL_NIF_TERM *ar
 }
 
 static enum op_return
-handle_op_image_sfc_create(ErlNifEnv *env, struct context *ctx, const ERL_NIF_TERM *argv, int argc)
+handle_op_set_aa(ErlNifEnv *env, struct context *ctx, const ERL_NIF_TERM *argv, int argc)
 {
-	int w, h;
+	struct aa_mode { ERL_NIF_TERM atom; cairo_antialias_t mode; };
+	int i;
+	cairo_antialias_t *mode = NULL;
+	struct aa_mode modes[] = {
+		{enif_make_atom(env, "default"), CAIRO_ANTIALIAS_DEFAULT},
+		{enif_make_atom(env, "gray"), CAIRO_ANTIALIAS_GRAY},
+		{enif_make_atom(env, "fast"), CAIRO_ANTIALIAS_FAST},
+		{enif_make_atom(env, "good"), CAIRO_ANTIALIAS_GOOD},
+		{enif_make_atom(env, "best"), CAIRO_ANTIALIAS_BEST}
+	};
+	if (ctx->cairo == NULL)
+		return ERR_NOT_INIT;
+	if (argc != 1)
+		return ERR_BAD_ARGS;
 
-	if (ctx->cairo != NULL)
-		return ERR_BAD_ARGS;
-	if (argc != 2)
-		return ERR_BAD_ARGS;
-
-	if (!enif_get_int(env, argv[0], &w))
-		return ERR_BAD_ARGS;
-	if (!enif_get_int(env, argv[1], &h))
-		return ERR_BAD_ARGS;
-
-	ctx->sfc = cairo_image_surface_create(CAIRO_FORMAT_RGB24, w, h);
-	if (cairo_surface_status(ctx->sfc) != CAIRO_STATUS_SUCCESS)
-		return ERR_FAILURE;
-	ctx->cairo = cairo_create(ctx->sfc);
-	if (cairo_status(ctx->cairo) != CAIRO_STATUS_SUCCESS) {
-		cairo_surface_destroy(ctx->sfc);
-		ctx->sfc = NULL;
-		return ERR_FAILURE;
+	for (i = 0; i < (sizeof(modes) / sizeof(*modes)); ++i) {
+		if (enif_is_identical(argv[0], modes[i].atom)) {
+			mode = &modes[i].mode;
+		}
 	}
-	ctx->w = w;
-	ctx->h = h;
+	if (mode == NULL)
+		return ERR_BAD_ARGS;
+
+	cairo_set_antialias(ctx->cairo, *mode);
 
 	return OP_OK;
 }
 
 static struct op_handler op_handlers[] = {
-	{"cairo_image_sfc_create", handle_op_image_sfc_create},
 	{"cairo_arc", handle_op_arc},
 	{"cairo_rectangle", handle_op_rectangle},
 	{"cairo_set_source_rgba", handle_op_set_source_rgba},
 	{"cairo_set_source", handle_op_set_source},
+	{"cairo_set_antialias", handle_op_set_aa},
 	{"cairo_fill", handle_op_fill}
 };
 const int n_handlers = sizeof(op_handlers) / sizeof(struct op_handler);

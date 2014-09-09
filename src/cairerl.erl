@@ -30,7 +30,7 @@
 
 -include("cairerl.hrl").
 
--type antialias_flags() :: [gray | subpixel | fast | good | best].
+-type antialias_mode() :: gray | subpixel | fast | good | best | default.
 -type tag() :: atom().
 -type value() :: float() | tag().
 -type image() :: #cairo_image{}.
@@ -38,4 +38,4 @@
 -type op() :: tuple().
 
 
--export_type([antialias_flags/0, tag/0, value/0, op/0, image/0]).
+-export_type([antialias_mode/0, tag/0, value/0, op/0, image/0]).

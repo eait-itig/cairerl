@@ -857,7 +857,79 @@ free_and_exit:
 static ERL_NIF_TERM
 png_read(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
-	return enif_make_atom(env, "ok");
+	char fnamebuf[256];
+	cairo_surface_t *sfc = NULL;
+	cairo_format_t fmt;
+	ErlNifBinary fname, img;
+	cairo_status_t status;
+	ERL_NIF_TERM err;
+	int w, h, stride;
+	ERL_NIF_TERM out_tuple[5];
+
+	memset(&fname, 0, sizeof(fname));
+	memset(&img, 0, sizeof(img));
+
+	/* get the filename to read from */
+	if (!enif_inspect_binary(env, argv[0], &fname)) {
+		if (!enif_inspect_iolist_as_binary(env, argv[0], &fname)) {
+			err = enif_make_atom(env, "bad_filename");
+			goto fail;
+		}
+	}
+	assert(fname.size < 255);
+	memcpy(fnamebuf, fname.data, fname.size);
+	fnamebuf[fname.size] = 0;
+
+	sfc = cairo_image_surface_create_from_png(fnamebuf);
+	if ((status = cairo_surface_status(sfc)) != CAIRO_STATUS_SUCCESS) {
+		err = enif_make_tuple2(env, enif_make_atom(env, "bad_surface_status"), enif_make_int(env, status));
+		goto fail;
+	}
+
+	fmt = cairo_image_surface_get_format(sfc);
+	w = cairo_image_surface_get_width(sfc);
+	h = cairo_image_surface_get_height(sfc);
+	stride = cairo_image_surface_get_stride(sfc);
+	assert(stride == cairo_format_stride_for_width(fmt, w));
+
+	assert(enif_alloc_binary(h*stride, &img));
+	memcpy(img.data, cairo_image_surface_get_data(sfc), h*stride);
+
+	out_tuple[0] = enif_make_atom(env, "cairo_image");
+	out_tuple[1] = enif_make_int(env, w);
+	out_tuple[2] = enif_make_int(env, h);
+	switch (fmt) {
+		case CAIRO_FORMAT_RGB24:
+			out_tuple[3] = enif_make_atom(env, "rgb24");
+			break;
+		case CAIRO_FORMAT_ARGB32:
+			out_tuple[3] = enif_make_atom(env, "argb32");
+			break;
+		case CAIRO_FORMAT_RGB30:
+			out_tuple[3] = enif_make_atom(env, "rgb30");
+			break;
+		case CAIRO_FORMAT_RGB16_565:
+			out_tuple[3] = enif_make_atom(env, "rgb16_565");
+			break;
+		default:
+			err = enif_make_atom(env, "invalid_format");
+			goto fail;
+	}
+	out_tuple[4] = enif_make_binary(env, &img);
+	img.data = NULL;
+
+	cairo_surface_destroy(sfc);
+
+	return enif_make_tuple2(env,
+		enif_make_atom(env, "ok"),
+		enif_make_tuple_from_array(env, out_tuple, 5));
+
+fail:
+	if (sfc != NULL)
+		cairo_surface_destroy(sfc);
+	if (img.data != NULL)
+		enif_release_binary(&img);
+	return enif_make_tuple2(env, enif_make_atom(env, "error"), err);
 }
 
 static ERL_NIF_TERM

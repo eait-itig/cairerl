@@ -999,6 +999,13 @@ draw(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 
 		switch (ret) {
 			case OP_OK:
+				if ((status = cairo_status(ctx->cairo)) != CAIRO_STATUS_SUCCESS) {
+					err = enif_make_tuple3(env,
+						enif_make_atom(env, "cairo_error"),
+						enif_make_string(env, cairo_status_to_string(status), ERL_NIF_LATIN1),
+						head);
+					goto fail;
+				}
 				break;
 			case ERR_NOT_TUPLE:
 			case ERR_NOT_ATOM:
@@ -1009,7 +1016,11 @@ draw(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 				err = enif_make_tuple2(env, enif_make_atom(env, "unknown"), head);
 				goto fail;
 			case ERR_FAILURE:
-				err = enif_make_tuple2(env, enif_make_atom(env, "cairo_error"), head);
+				status = cairo_status(ctx->cairo);
+				err = enif_make_tuple3(env,
+					enif_make_atom(env, "cairo_error"),
+					enif_make_string(env, cairo_status_to_string(status), ERL_NIF_LATIN1),
+					head);
 				goto fail;
 			case ERR_TAG_ALREADY:
 				err = enif_make_tuple2(env, enif_make_atom(env, "tag_already_set"), head);

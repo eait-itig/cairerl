@@ -74,6 +74,7 @@ enum op_return {
 	ERR_UNKNOWN_OP = -3,
 	ERR_NOT_INIT = -4,
 	ERR_FAILURE = -5,
+	ERR_TAG_ALREADY = -6,
 	ERR_BAD_ARGS = -10
 };
 
@@ -89,6 +90,72 @@ struct op_handler {
 	const char *name;
 	enum op_return (*handler)(ErlNifEnv*, struct context *, const ERL_NIF_TERM *, int);
 };
+
+static int
+get_tag_double(ErlNifEnv *env, struct context *ctx, const ERL_NIF_TERM tagOrValue, double *out)
+{
+	struct tag_node node;
+	struct tag_node *found;
+
+	if (enif_get_double(env, tagOrValue, out)) {
+		return 1;
+	} else {
+		memset(&node, 0, sizeof(node));
+		node.tag = tagOrValue;
+
+		found = RB_FIND(tag_tree, &ctx->tag_head, &node);
+		if (found == NULL)
+			return 0;
+
+		if (found->type != TAG_DOUBLE)
+			return 0;
+
+		*out = found->v_dbl;
+		return 1;
+	}
+}
+
+static enum op_return
+set_tag_double(ErlNifEnv *env, struct context *ctx, const ERL_NIF_TERM tag, double value)
+{
+	struct tag_node *tn, *rn;
+
+	tn = enif_alloc(sizeof(*tn));
+	memset(tn, 0, sizeof(*tn));
+
+	tn->tag = tag;
+	tn->type = TAG_DOUBLE;
+	tn->v_dbl = value;
+
+	rn = RB_INSERT(tag_tree, &ctx->tag_head, tn);
+	if (rn != NULL) {
+		enif_free(tn);
+		return ERR_TAG_ALREADY;
+	}
+
+	return OP_OK;
+}
+
+static enum op_return
+set_tag_ptr(ErlNifEnv *env, struct context *ctx, const ERL_NIF_TERM tag, enum tag_type type, void *value)
+{
+	struct tag_node *tn, *rn;
+
+	tn = enif_alloc(sizeof(*tn));
+	memset(tn, 0, sizeof(*tn));
+
+	tn->tag = tag;
+	tn->type = type;
+	tn->v_ptr = value;
+
+	rn = RB_INSERT(tag_tree, &ctx->tag_head, tn);
+	if (rn != NULL) {
+		enif_free(tn);
+		return ERR_TAG_ALREADY;
+	}
+
+	return OP_OK;
+}
 
 static enum op_return
 handle_op_arc(ErlNifEnv *env, struct context *ctx, const ERL_NIF_TERM *argv, int argc)
@@ -110,13 +177,13 @@ handle_op_rectangle(ErlNifEnv *env, struct context *ctx, const ERL_NIF_TERM *arg
 	if (argc != 4)
 		return ERR_BAD_ARGS;
 
-	if (!enif_get_double(env, argv[0], &x))
+	if (!get_tag_double(env, ctx, argv[0], &x))
 		return ERR_BAD_ARGS;
-	if (!enif_get_double(env, argv[1], &y))
+	if (!get_tag_double(env, ctx, argv[1], &y))
 		return ERR_BAD_ARGS;
-	if (!enif_get_double(env, argv[2], &w))
+	if (!get_tag_double(env, ctx, argv[2], &w))
 		return ERR_BAD_ARGS;
-	if (!enif_get_double(env, argv[3], &h))
+	if (!get_tag_double(env, ctx, argv[3], &h))
 		return ERR_BAD_ARGS;
 
 	cairo_rectangle(ctx->cairo, x, y, w, h);
@@ -251,7 +318,7 @@ draw(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
 	ErlNifBinary pixels;
 	struct context *ctx = NULL;
-	struct tag_node *tn = NULL, *rn;
+	struct tag_node *tn = NULL, *rn, *tn_next;
 	ERL_NIF_TERM head, tail, out_tags, err = 0, ret;
 	int arity, status, stride;
 	const ERL_NIF_TERM *tuple;
@@ -368,6 +435,68 @@ draw(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 	out_tuple[3] = enif_make_binary(env, &ctx->out);
 
 	out_tags = enif_make_list(env, 0);
+	for (tn = RB_MIN(tag_tree, &ctx->tag_head); tn != NULL; tn = tn_next) {
+		ERL_NIF_TERM val;
+
+		tn_next = RB_NEXT(tag_tree, &ctx->tag_head, tn);
+		RB_REMOVE(tag_tree, &ctx->tag_head, tn);
+
+		switch (tn->type) {
+			case TAG_DOUBLE:
+				val = enif_make_double(env, tn->v_dbl);
+				break;
+			case TAG_TEXT_EXTENTS:
+				val = enif_make_tuple7(env,
+					enif_make_atom(env, "cairo_tag_text_extents"),
+					enif_make_double(env, tn->v_text_exts->x_bearing),
+					enif_make_double(env, tn->v_text_exts->y_bearing),
+					enif_make_double(env, tn->v_text_exts->width),
+					enif_make_double(env, tn->v_text_exts->height),
+					enif_make_double(env, tn->v_text_exts->x_advance),
+					enif_make_double(env, tn->v_text_exts->y_advance));
+				enif_free(tn->v_text_exts);
+				break;
+			case TAG_PATTERN:
+				switch (cairo_pattern_get_type(tn->v_pattern)) {
+					case CAIRO_PATTERN_TYPE_SOLID:
+						val = enif_make_tuple2(env,
+							enif_make_atom(env, "cairo_tag_pattern"),
+							enif_make_atom(env, "solid"));
+						break;
+					case CAIRO_PATTERN_TYPE_SURFACE:
+						val = enif_make_tuple2(env,
+							enif_make_atom(env, "cairo_tag_pattern"),
+							enif_make_atom(env, "surface"));
+						break;
+					case CAIRO_PATTERN_TYPE_LINEAR:
+						val = enif_make_tuple2(env,
+							enif_make_atom(env, "cairo_tag_pattern"),
+							enif_make_atom(env, "linear"));
+						break;
+					default:
+						err = enif_make_atom(env, "unhandled_tag_pattern_type");
+						goto fail;
+				}
+				cairo_pattern_destroy(tn->v_pattern);
+				break;
+			case TAG_PATH:
+				val = enif_make_tuple2(env,
+					enif_make_atom(env, "cairo_tag_path"),
+					enif_make_int(env, tn->v_path->num_data));
+				cairo_path_destroy(tn->v_path);
+				break;
+			default:
+				err = enif_make_tuple2(env,
+					enif_make_atom(env, "unknown_tag_type"),
+					enif_make_int(env, tn->type));
+				goto fail;
+		}
+
+		out_tags = enif_make_list_cell(env,
+			enif_make_tuple2(env, tn->tag, val), out_tags);
+
+		enif_free(tn);
+	}
 
 	ret = enif_make_tuple3(env,
 		enif_make_atom(env, "ok"),
@@ -380,6 +509,28 @@ fail:
 
 free_and_exit:
 	if (ctx != NULL) {
+		for (tn = RB_MIN(tag_tree, &ctx->tag_head); tn != NULL; tn = tn_next) {
+			tn_next = RB_NEXT(tag_tree, &ctx->tag_head, tn);
+			RB_REMOVE(tag_tree, &ctx->tag_head, tn);
+
+			switch (tn->type) {
+				case TAG_TEXT_EXTENTS:
+					enif_free(tn->v_text_exts);
+					break;
+				case TAG_PATTERN:
+					cairo_pattern_destroy(tn->v_pattern);
+					break;
+				case TAG_PATH:
+					cairo_path_destroy(tn->v_path);
+					break;
+				default:
+					/* nothing to free */
+					break;
+			}
+
+			enif_free(tn);
+		}
+
 		if (ctx->cairo != NULL)
 			cairo_destroy(ctx->cairo);
 		if (ctx->sfc != NULL)

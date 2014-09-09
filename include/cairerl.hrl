@@ -27,6 +27,9 @@
 %%
 
 -record(cairo_image, {width :: integer(), height :: integer(), data :: binary()}).
+-record(cairo_tag_text_extents, {x_bearing :: float(), y_bearing :: float(), width :: float(), height :: float(), x_advance :: float(), y_advance :: float()}).
+-record(cairo_tag_pattern, {type :: solid | surface | linear | radial | mesh | raster}).
+-record(cairo_tag_path, {size :: integer()}).
 
 % tags (state data)
 -record(cairo_set_tag, {tag :: atom(), value :: cairerl:value()}).

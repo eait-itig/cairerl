@@ -52,6 +52,17 @@ handle_op_new_sub_path(ErlNifEnv *env, struct context *ctx, const ERL_NIF_TERM *
 }
 
 static enum op_return
+handle_op_new_path(ErlNifEnv *env, struct context *ctx, const ERL_NIF_TERM *argv, int argc)
+{
+	if (ctx->cairo == NULL)
+		return ERR_NOT_INIT;
+	if (argc != 0)
+		return ERR_BAD_ARGS;
+	cairo_new_path(ctx->cairo);
+	return OP_OK;
+}
+
+static enum op_return
 handle_op_close_path(ErlNifEnv *env, struct context *ctx, const ERL_NIF_TERM *argv, int argc)
 {
 	if (ctx->cairo == NULL)
@@ -649,6 +660,7 @@ struct op_handler op_handlers[] = {
 	/* path operations */
 	{"cairo_arc", handle_op_arc},
 	{"cairo_rectangle", handle_op_rectangle},
+	{"cairo_new_path", handle_op_new_path},
 	{"cairo_new_sub_path", handle_op_new_sub_path},
 	{"cairo_line_to", handle_op_line_to},
 	{"cairo_move_to", handle_op_move_to},

@@ -39,6 +39,7 @@
 % path operations
 -record(cairo_arc, {xc :: cairerl:value(), yc :: cairerl:value(), radius :: cairerl:value(), angle1 :: cairerl:value(), angle2 :: cairerl:value()}).
 -record(cairo_rectangle, {x = 0.0 :: cairerl:value(), y = 0.0 :: cairerl:value(), width :: cairerl:value(), height :: cairerl:value()}).
+-record(cairo_new_path, {}).
 -record(cairo_new_sub_path, {}).
 -record(cairo_curve_to, {x :: cairerl:value(), y :: cairerl:value(),
 				   x2 :: cairerl:value(), y2 :: cairerl:value(),

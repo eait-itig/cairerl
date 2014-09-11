@@ -45,7 +45,8 @@ enum tag_type {
 	TAG_DOUBLE,
 	TAG_TEXT_EXTENTS,
 	TAG_PATTERN,
-	TAG_PATH
+	TAG_PATH,
+	TAG_FONT_EXTENTS
 };
 
 struct tag_node;
@@ -59,6 +60,7 @@ struct tag_node {
 		cairo_text_extents_t *v_text_exts;
 		cairo_pattern_t *v_pattern;
 		cairo_path_t *v_path;
+		cairo_font_extents_t *v_font_exts;
 	};
 };
 

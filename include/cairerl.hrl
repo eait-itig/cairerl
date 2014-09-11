@@ -28,6 +28,7 @@
 
 -record(cairo_image, {width :: integer(), height :: integer(), format = rgb24 :: cairerl:pixel_format(), data :: binary()}).
 -record(cairo_tag_text_extents, {x_bearing :: float(), y_bearing :: float(), width :: float(), height :: float(), x_advance :: float(), y_advance :: float()}).
+-record(cairo_tag_font_extents, {ascent :: float(), descent :: float(), height :: float(), max_x_advance :: float(), max_y_advance :: float()}).
 -record(cairo_tag_pattern, {type :: solid | surface | linear | radial | mesh | raster}).
 -record(cairo_tag_path, {size :: integer()}).
 
@@ -71,6 +72,7 @@
 
 % text operations
 -record(cairo_text_extents, {tag :: atom(), text :: binary()}).
+-record(cairo_font_extents, {tag :: atom()}).
 -record(cairo_select_font_face, {family :: binary(), slant = normal :: normal | italic | oblique, weight = normal :: normal | bold}).
 -record(cairo_set_font_size, {size :: float()}).
 -record(cairo_show_text, {text :: binary()}).

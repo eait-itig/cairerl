@@ -237,6 +237,16 @@ draw(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 					enif_make_double(env, tn->v_text_exts->y_advance));
 				enif_free(tn->v_text_exts);
 				break;
+			case TAG_FONT_EXTENTS:
+				val = enif_make_tuple6(env,
+					enif_make_atom(env, "cairo_tag_font_extents"),
+					enif_make_double(env, tn->v_font_exts->ascent),
+					enif_make_double(env, tn->v_font_exts->descent),
+					enif_make_double(env, tn->v_font_exts->height),
+					enif_make_double(env, tn->v_font_exts->max_x_advance),
+					enif_make_double(env, tn->v_font_exts->max_y_advance));
+				enif_free(tn->v_font_exts);
+				break;
 			case TAG_PATTERN:
 				switch (cairo_pattern_get_type(tn->v_pattern)) {
 					case CAIRO_PATTERN_TYPE_SOLID:
@@ -297,6 +307,9 @@ free_and_exit:
 			switch (tn->type) {
 				case TAG_TEXT_EXTENTS:
 					enif_free(tn->v_text_exts);
+					break;
+				case TAG_FONT_EXTENTS:
+					enif_free(tn->v_font_exts);
 					break;
 				case TAG_PATTERN:
 					cairo_pattern_destroy(tn->v_pattern);

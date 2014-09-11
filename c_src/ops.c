@@ -381,6 +381,25 @@ handle_op_text_extents(ErlNifEnv *env, struct context *ctx, const ERL_NIF_TERM *
 }
 
 static enum op_return
+handle_op_font_extents(ErlNifEnv *env, struct context *ctx, const ERL_NIF_TERM *argv, int argc)
+{
+	cairo_font_extents_t *exts = NULL;
+
+	if (ctx->cairo == NULL)
+		return ERR_NOT_INIT;
+	if (argc != 1)
+		return ERR_BAD_ARGS;
+
+	exts = enif_alloc(sizeof(*exts));
+	assert(exts != NULL);
+	memset(exts, 0, sizeof(*exts));
+
+	cairo_font_extents(ctx->cairo, exts);
+
+	return set_tag_ptr(env, ctx, argv[0], TAG_FONT_EXTENTS, exts);
+}
+
+static enum op_return
 handle_op_show_text(ErlNifEnv *env, struct context *ctx, const ERL_NIF_TERM *argv, int argc)
 {
 	ErlNifBinary textbin;
@@ -555,6 +574,22 @@ handle_op_tag_deref(ErlNifEnv *env, struct context *ctx, const ERL_NIF_TERM *arg
 			}
 			return set_tag_double(env, ctx, argv[2], val);
 
+		case TAG_FONT_EXTENTS:
+			if (enif_is_identical(argv[1], enif_make_atom(env, "ascent"))) {
+				val = found->v_font_exts->ascent;
+			} else if (enif_is_identical(argv[1], enif_make_atom(env, "descent"))) {
+				val = found->v_font_exts->descent;
+			} else if (enif_is_identical(argv[1], enif_make_atom(env, "height"))) {
+				val = found->v_font_exts->height;
+			} else if (enif_is_identical(argv[1], enif_make_atom(env, "max_x_advance"))) {
+				val = found->v_font_exts->max_x_advance;
+			} else if (enif_is_identical(argv[1], enif_make_atom(env, "max_y_advance"))) {
+				val = found->v_font_exts->max_y_advance;
+			} else {
+				return ERR_BAD_ARGS;
+			}
+			return set_tag_double(env, ctx, argv[2], val);
+
 		default:
 			return ERR_BAD_ARGS;
 	}
@@ -625,6 +660,7 @@ struct op_handler op_handlers[] = {
 
 	/* text operations */
 	{"cairo_text_extents", handle_op_text_extents},
+	{"cairo_font_extents", handle_op_font_extents},
 	{"cairo_select_font_face", handle_op_select_font_face},
 	{"cairo_set_font_size", handle_op_set_font_size},
 	{"cairo_show_text", handle_op_show_text},

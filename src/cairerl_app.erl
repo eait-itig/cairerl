@@ -31,6 +31,6 @@
 -export([start/2, stop/0]).
 
 start(_Type, []) ->
-	ok.
+	{ok, self()}.
 
 stop() -> ok.

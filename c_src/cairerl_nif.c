@@ -76,6 +76,7 @@ draw(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 	struct tag_node *tn = NULL, *rn, *tn_next;
 	ERL_NIF_TERM head, tail, out_tags, err = 0, ret;
 	int arity, status, stride;
+	cairo_format_t fmt;
 	const ERL_NIF_TERM *tuple;
 	const ERL_NIF_TERM *img_tuple;
 	ERL_NIF_TERM out_tuple[5];
@@ -89,7 +90,13 @@ draw(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 		err = enif_make_atom(env, "bad_record");
 		goto fail;
 	}
-	if (!enif_is_identical(img_tuple[3], enif_make_atom(env, "rgb24"))) {
+	if (enif_is_identical(img_tuple[3], enif_make_atom(env, "rgb24"))) {
+		fmt = CAIRO_FORMAT_RGB24;
+	} else if (enif_is_identical(img_tuple[3], enif_make_atom(env, "rgb16_565"))) {
+		fmt = CAIRO_FORMAT_RGB16_565;
+	} else if (enif_is_identical(img_tuple[3], enif_make_atom(env, "argb32"))) {
+		fmt = CAIRO_FORMAT_ARGB32;
+	} else {
 		err = enif_make_atom(env, "bad_pixel_format");
 		goto fail;
 	}
@@ -114,15 +121,14 @@ draw(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 	}
 
 	/* allocate and fill the bitmap and cairo context */
-	assert(enif_alloc_binary(ctx->h * ctx->w * 4, &ctx->out));
+	stride = cairo_format_stride_for_width(fmt, ctx->w);
+	assert(enif_alloc_binary(ctx->h * stride, &ctx->out));
 	assert(ctx->out.data != NULL);
 	if (pixels.size > 0)
 		memcpy(ctx->out.data, pixels.data, pixels.size);
 
-	stride = cairo_format_stride_for_width(CAIRO_FORMAT_RGB24, ctx->w);
-	assert(stride == ctx->w * 4);
 	ctx->sfc = cairo_image_surface_create_for_data(
-			ctx->out.data, CAIRO_FORMAT_RGB24, ctx->w, ctx->h, ctx->w * 4);
+			ctx->out.data, fmt, ctx->w, ctx->h, stride);
 
 	if ((status = cairo_surface_status(ctx->sfc)) != CAIRO_STATUS_SUCCESS) {
 		err = enif_make_tuple2(env, enif_make_atom(env, "bad_surface_status"), enif_make_int(env, status));
@@ -211,7 +217,7 @@ draw(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 	out_tuple[0] = enif_make_atom(env, "cairo_image");
 	out_tuple[1] = enif_make_int(env, ctx->w);
 	out_tuple[2] = enif_make_int(env, ctx->h);
-	out_tuple[3] = enif_make_atom(env, "rgb24");
+	out_tuple[3] = img_tuple[3];
 	cairo_surface_finish(ctx->sfc);
 	out_tuple[4] = enif_make_binary(env, &ctx->out);
 

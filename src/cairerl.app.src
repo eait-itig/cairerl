@@ -1,6 +1,6 @@
-{application, cairerl,
- [
- 	{description, "cairo graphics for erlang"},
- 	{vsn, "1.0"},
- 	{mod, {cairerl_app, []}}
- ]}.
+{application, cairerl, [
+    {description, "cairo graphics for erlang"},
+    {vsn, "1.0"},
+    {mod, {cairerl_app, []}},
+    {applications, [kernel, stdlib]}
+]}.

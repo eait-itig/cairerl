@@ -119,6 +119,14 @@ draw(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 		err = enif_make_atom(env, "bad_height");
 		goto fail;
 	}
+	if (ctx->w < 0 || ctx->h < 0) {
+		err = enif_make_atom(env, "negative_dimensions");
+		goto fail;
+	}
+	if (ctx->w > 32768 || ctx->h > 32768) {
+		err = enif_make_atom(env, "dimensions_too_big");
+		goto fail;
+	}
 
 	/* allocate and fill the bitmap and cairo context */
 	stride = cairo_format_stride_for_width(fmt, ctx->w);
